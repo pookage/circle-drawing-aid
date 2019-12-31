@@ -31,10 +31,12 @@ function init(){
 	});
 
 	// create initial circle
-	drawCircle(state, context, canvas);
+	const target = generateCircle(state, context, canvas);
+	state.target = target;
 
-	// add to DOM
+	// start it up
 	document.body.appendChild(canvas);
+	drawCircle(context, target);
 
 }// init
 
@@ -49,7 +51,7 @@ function initCanvas(){
 
 	context.strokeStyle = "#111111";
 	context.lineJoin    = "round";
-	context.lineWidth   = 5;
+	context.lineWidth   = 2;
 
 	return { canvas, context };
 }// initCanvas
@@ -64,34 +66,29 @@ function initListeners(element, actions){
 //////////////////////////
 // LIFECYCLE -------------
 //////////////////////////
-function drawCircle(state, context, canvas){
+function generateCircle(state, context, canvas){
 
 	// circle config
-	const { max }   = state;
-	const min       = max * 0.1;
-	const radius    = (random(min, max) / 2) * 0.9;
+	const { max } = state;
+	const min     = max * 0.1;
+	const radius  = (random(min, max) / 2) * 0.9;
 
 	// position config
-	const buffer    = radius + (radius * 0.1);
-	const xMinBound = buffer;
-	const yMinBound = buffer;
-	const xMaxBound = window.innerWidth - buffer;
-	const yMaxBound = window.innerHeight - buffer; 
+	const {
+		innerWidth,
+		innerHeight
+	} = window;
 
-	const x = random(xMinBound, xMaxBound);
-	const y = random(yMinBound, yMaxBound);
+	const x = (innerWidth / 2);
+	const y = (innerHeight / 2);
 
-	context.fillStyle = "#DDDDDD";
+	return {
+		x, y, 
+		radius
+	};
+}// generateCircle
 
-	context.beginPath();
-	context.moveTo(x, y);
-	context.arc(x, y, radius, 0, Math.PI * 2)
-	context.closePath();
 
-	context.fill();
-
-	console.log("circle drawn!", { x, y, radius })
-}// drawCircle
 
 
 //////////////////////////
@@ -113,31 +110,78 @@ function endDraw(state, context, canvas, event){
 	event.preventDefault();
 
 	const { width, height } = canvas;
-	const { path }          = state;
+	const { path, target }  = state;
 
-	context.beginPath();
+	// start fresh
+	context.clearRect(0, 0, width, height);
 
-	for(let index in path){
-		const { x, y } = path[index];
+	// const score = compare(context, target, path, "source-atop");
 
-		if(index === 0) context.moveTo(x, y);
-		else            context.lineTo(x, y);
+	const userInput   = drawPath.bind(true, context, path);
+	const targetInput = drawCircle.bind(true, context, target);
+
+	// determines how too far IN you are (black is bad)
+	const score = compare(
+		userInput.bind(true, "#FFFFFF"),
+		targetInput.bind(true, "#000000"),
+	);
+
+
+	// capture the current state of the image
+	const capture = context.getImageData(0, 0, width, height);
+	const { data: pixelData } = capture;
+
+	for(let index = 3; index < pixelData.length; index += 4){
+		const r = pixelData[index - 3];
+		const g = pixelData[index - 2];
+		const b = pixelData[index - 1];
+
+		const isWhite = r === 255 && g === 255 && b === 255;
+
+		// if(isWhite) pixelData[index] = 0;
 	}
 
-	context.closePath();
+	capture.data = pixelData;
 
-	// console.log(path)
+	const captureCanvas  = document.createElement("canvas");
+	const captureContext = captureCanvas.getContext("2d");
+	captureCanvas.width  = width;
+	captureCanvas.height = height;
+	document.body.appendChild(captureCanvas)
 
-	// context.clearRect(0, 0, width, height);
-	context.fillStyle = "#000000";
-	context.fill()
+	captureContext.putImageData(capture, 0, 0);
+	const captureImgData = captureCanvas.toDataURL();
+	const captureImg     = new Image();
 
+	captureImg.src = captureImgData;
+	context.clearRect(0, 0, width, height);
+
+	console.log(captureImg)
+	// determines how too far OUT you are (black is bad)
+	const scoreb = compare(
+		targetInput.bind(true, "#FFFFFF"),
+		userInput.bind(true, "#000000"),
+	);
+
+	context.drawImage(captureImg, 0, 0, width, height);
+
+
+	/*
+		TODO:
+			1. convert 'white' to 'transparent'
+			2. combine the two diffs into one
+			3. redraw target circle (to calculate area / circumfrence?)
+			4. get # of black pixels as ratio of circle area (maybe circumfrence?)
+			5. report 
+
+			
+			NOTE: maybe a better way to do this is to draw a ring and test diff with that instead?
+			NOTE: current method allows us to see if more pixels on outer or inenr to say "too big!" or "too small!"
+	*/
 
 	// reset
 	state.drawing      = false;
 	state.lastPosition = {};
-	// evaluate
-	// new circle!
 }// endDraw
 
 function requestDraw(...args){
@@ -197,9 +241,50 @@ function draw(state, context, canvas, event){
 }// draw
 
 
-//
-
+//////////////////////////
+// UTILS -----------------
+//////////////////////////
 function random(min, max){
 
 	return Math.floor(Math.random() * (max - min + 1) + min);
 }// random
+
+function drawCircle(context, { x, y, radius }, color = "#DDDDDD", overlap = "source-over"){
+
+
+	context.globalCompositeOperation = overlap;
+
+	context.beginPath();
+	context.moveTo(x, y);
+	context.arc(x, y, radius, 0, Math.PI * 2)
+	context.closePath();
+
+	context.fillStyle = color;            
+	context.fill();
+}// drawCircle
+
+function drawPath(context, path, color = "#000000", overlap = "source-over" ){
+
+	context.beginPath();
+
+	context.globalCompositeOperation = overlap;
+
+	for(let index in path){
+		const { x, y } = path[index];
+
+		if(index === 0) context.moveTo(x, y);
+		else            context.lineTo(x, y);
+	}
+
+	context.closePath();
+
+	context.fillStyle = color;
+	context.fill()
+}// drawPath
+
+function compare(drawSource, drawTarget){
+
+	drawTarget("source-over");
+	drawSource("source-atop");
+
+}// compare
