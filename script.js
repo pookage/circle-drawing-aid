@@ -8,6 +8,7 @@ function init(){
 
 	// create and configure canvas
 	const { canvas, context } = initCanvas();
+	const { canvas: bufferCanvas, context: bufferContext } = initCanvas();
 
 	// create an app state
 	const state = {
@@ -19,7 +20,7 @@ function init(){
 
 	// bind all the functions as needed
 	const handleDrawStart  = startDraw.bind(true, state);
-	const handleDrawEnd    = endDraw.bind(true, state, context, canvas);
+	const handleDrawEnd    = endDraw.bind(true, state, context, canvas, bufferContext, bufferCanvas);
 	const handleDrawUpdate = draw.bind(true, state, context, canvas);
 
 	// add listeners for relative mouse events
@@ -34,8 +35,11 @@ function init(){
 	const target = generateCircle(state, context, canvas);
 	state.target = target;
 
-	// start it up
+	// add canvases to the page
+	document.body.appendChild(bufferCanvas);
 	document.body.appendChild(canvas);
+
+	// draw the initial circle on the page
 	drawCircle(context, target);
 
 }// init
@@ -103,7 +107,7 @@ function startDraw(state, event){
 	state.path    = [];
 }// startDraw
 
-function endDraw(state, context, canvas, event){
+async function endDraw(state, context, canvas, bufferContext, bufferCanvas, event){
 
 	console.log("end!")
 
@@ -115,55 +119,36 @@ function endDraw(state, context, canvas, event){
 	// start fresh
 	context.clearRect(0, 0, width, height);
 
-	// const score = compare(context, target, path, "source-atop");
-
 	const userInput   = drawPath.bind(true, context, path);
 	const targetInput = drawCircle.bind(true, context, target);
 
 	// determines how too far IN you are (black is bad)
-	const score = compare(
+	const score = drawDiff(
 		userInput.bind(true, "#FFFFFF"),
 		targetInput.bind(true, "#000000"),
 	);
 
+	const innerBounds = await generateImage(state, context, canvas, bufferContext, bufferCanvas);
+	
+	// context.clearRect(0, 0, width, height);
 
-	// capture the current state of the image
-	const capture = context.getImageData(0, 0, width, height);
-	const { data: pixelData } = capture;
-
-	for(let index = 3; index < pixelData.length; index += 4){
-		const r = pixelData[index - 3];
-		const g = pixelData[index - 2];
-		const b = pixelData[index - 1];
-
-		const isWhite = r === 255 && g === 255 && b === 255;
-
-		// if(isWhite) pixelData[index] = 0;
-	}
-
-	capture.data = pixelData;
-
-	const captureCanvas  = document.createElement("canvas");
-	const captureContext = captureCanvas.getContext("2d");
-	captureCanvas.width  = width;
-	captureCanvas.height = height;
-	document.body.appendChild(captureCanvas)
-
-	captureContext.putImageData(capture, 0, 0);
-	const captureImgData = captureCanvas.toDataURL();
-	const captureImg     = new Image();
-
-	captureImg.src = captureImgData;
-	context.clearRect(0, 0, width, height);
-
-	console.log(captureImg)
 	// determines how too far OUT you are (black is bad)
-	const scoreb = compare(
+	const scoreb = drawDiff(
 		targetInput.bind(true, "#FFFFFF"),
 		userInput.bind(true, "#000000"),
 	);
 
-	context.drawImage(captureImg, 0, 0, width, height);
+	const outerBounds = await generateImage(state, context, canvas, bufferContext, bufferCanvas);
+
+	context.clearRect(0, 0, width, height);
+	
+	// OKAY, WEIRD, SO :
+	// these two images seem to exist and are things (you can open them through inspect)
+	// BUT it doesn't seem to be able to draw them?! wtf. maybe drawImage doesn't work with Image() ?
+	// try <img /> elements instead? :|
+
+	context.drawImage(outerBounds, 0, 0, width, height);
+	context.drawImage(innerBounds, 0, 0, width, height);
 
 
 	/*
@@ -282,9 +267,41 @@ function drawPath(context, path, color = "#000000", overlap = "source-over" ){
 	context.fill()
 }// drawPath
 
-function compare(drawSource, drawTarget){
+function drawDiff(source, target){
 
-	drawTarget("source-over");
-	drawSource("source-atop");
-
+	target("source-over");
+	source("source-atop");
 }// compare
+
+function generateImage(state, context, canvas, bufferContext, bufferCanvas){
+	return new Promise((resolve) => {
+
+		// capture the current state of the image
+		const { width, height } = canvas;
+		const capture = context.getImageData(0, 0, width, height);
+		const { data: pixelData } = capture;
+
+		for(let index = 3; index < pixelData.length; index += 4){
+			const r = pixelData[index - 3];
+			const g = pixelData[index - 2];
+			const b = pixelData[index - 1];
+
+			const isWhite = r === 255 && g === 255 && b === 255;
+
+			if(isWhite) pixelData[index] = 0;
+		}
+
+		capture.data = pixelData;
+
+		bufferContext.putImageData(capture, 0, 0);
+		const captureImgData = bufferCanvas.toDataURL();
+		const captureImg     = new Image();
+
+		captureImg.src = captureImgData;
+
+		captureImg.addEventListener("load", () => {
+			bufferContext.clearRect(0, 0, width, height);
+			resolve(captureImg);
+		});
+	})
+}// generateImage
