@@ -473,7 +473,7 @@ function renderFeedback(state, diffComposite, context, canvas, bufferContext, bu
 	lastScoreEl.setAttribute("aria-value", lastScore);
 
 	// output the bests core
-	bestScoreEl.textContent = lastScore;
+	bestScoreEl.textContent = bestScore;
 	bestScoreEl.setAttribute("aria-value", bestScore);
 
 	
