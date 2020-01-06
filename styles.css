@@ -62,3 +62,6 @@ html, body, .canvas {
 			cursor: pointer;
 		}
 	.output__scores {}
+		.output__score::after {
+			content: "%";
+		}
