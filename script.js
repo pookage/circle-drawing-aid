@@ -19,8 +19,26 @@ function init(){
 		lastPosition: {},
 		max: Math.min(canvas.width, canvas.height),
 		path: [],
-		allowance: 1
+		allowance: 1,
+		last: {
+			score: 0,
+			drawn: {},
+			path: []
+		},
+		best: {
+			score: 0,
+			drawn: {},
+			path: []
+		},
+		ui: {
+			drawn: {
+				last: document.getElementById("output__last_drawn"),
+				best: document.getElementById("output__best_drawn")
+			},
+			score: document.getElementById("output__last_score")
+		}
 	};
+	state.restart = restart.bind(true, state, context, canvas);
 
 	// bind all the functions as needed
 	const handleDrawStart  = startDraw.bind(true, state, context, canvas);
@@ -43,9 +61,7 @@ function init(){
 	document.body.appendChild(bufferCanvas);
 	document.body.appendChild(canvas);
 
-	// draw the initial circle on the page
-	drawCircle(context, target);
-
+	state.restart();
 }// init
 
 function initCanvas(){
@@ -73,6 +89,17 @@ function initListeners(element, actions){
 //////////////////////////
 // LIFECYCLE -------------
 //////////////////////////
+function restart(state, context, canvas){
+
+	const { width, height } = canvas;
+	const target = generateCircle(state, context, canvas);
+	state.target = target;
+
+	context.clearRect(0, 0, width, height);
+	
+	// draw the initial circle on the page
+	drawCircle(context, target);
+}// restart
 function generateCircle(state, context, canvas){
 
 	// circle config
@@ -110,53 +137,76 @@ function startDraw(state, context, canvas, event){
 		case 1:
 			const { height }    = canvas;
 			state.drawing       = true;
-			state.path          = [];
+			// state.path          = [];
 			context.strokeStyle = "#000000";
 			context.lineWidth   = height / 335; //3;
+			clearTimeout(state.endTimeout);
 			break;
 	}
-
 }// startDraw
 
 async function endDraw(state, context, canvas, bufferContext, bufferCanvas, event){
 
-	// stop drawing the circle
-	state.drawing      = false;
-
 	event.preventDefault();
+	state.drawing      = false;
+	clearTimeout(state.endTimeout);
 
-	const { which: mouseButton } = event;
+	state.endTimeout = setTimeout(async () => {
+		const { which: mouseButton } = event;
 
-	switch(mouseButton){
+		switch(mouseButton){
 
-		// left-mouse click / main pointer click
-		case 1:
-			// generate score
-			const { target, allowance }    = state;
-			const { diff, size: diffSize } = await generateDiffComposite(state, context, canvas, bufferContext, bufferCanvas);
-			const score                    = calculateScore(target, diffSize, allowance);
+			// left-mouse click / main pointer click
+			case 1:
+				// generate score
+				const {
+					path, 
+					target, 
+					allowance,
+					last: { 
+						score: lastScore,
+						drawn: lastDrawn,
+						path: lastPath
+					},
+					best: {
+						score: bestScore,
+						drawn: bestDrawn,
+						path: bestPath
+					}
+				} = state;
+				const { diff, size: diffSize } = await generateDiffComposite(state, context, canvas, bufferContext, bufferCanvas);
+				const score                    = calculateScore(target, diffSize, allowance);
+				const last = {
+					score,
+					drawn: diff,
+					path,
+					target: state.target
+				};
 
-			// draw the coffeestain
-			context.putImageData(diff, 0, 0);
 
-			
-			console.log({ score })
-			// console.log({circumfrence, size: size.total, percentage: `${percentage * 100}%`})			
 
-			break;
-	}
+				// if the score is better than the last; save it as the best
+				if(score > bestScore){
+					console.log(`${score} is better than ${bestScore} - UPDATING BEST!`);
+					state.best = { ...last };
+				}
 
-	// reset state
+				state.last = last;
 
-	state.lastPosition = {};
-	state.path         = [];
+				renderFeedback(state, diff, context, canvas, bufferContext, bufferCanvas)
+				break;
+		}
+
+		// reset state
+		state.lastPosition = {};
+		state.path         = [];
+
+		countdown(state.restart, 3000, "restarting in...");
+	}, 1000);
+	// stop drawing the circle
 
 	/*
 		TODO:
-			1. redraw target circle & stroke with a thick border (proportionate to size? controllable via options?)
-			2. use globalCompositeOperation to cut-out stroke from composite diff
-			3. count the number of black pixels
-			4. compare #3 with the circumfrence of the circle to generate score
 			5. add user-inputs to control:
 				a. size of min/max circle radius
 				b. size of evaluation stroke
@@ -232,6 +282,12 @@ function draw(state, context, canvas, event){
 	}
 }// draw
 
+function updateCanvasSize(canvas, event){
+	const { innerWidth, innerHeight } = event.target;
+	canvas.height = innerHeight;
+	canvas.width  = innerWidth
+}// updateCanvasSize
+
 
 //////////////////////////
 // UTILS -----------------
@@ -240,6 +296,14 @@ function random(min, max){
 
 	return Math.floor(Math.random() * (max - min + 1) + min);
 }// random
+
+function countdown(callback, remaining, message){
+	if(remaining > 0){
+		const text = `${message} ${remaining / 1000}s`;
+		console.log(text);
+		setTimeout(() => countdown(callback, remaining-1000, message), 1000);
+	} else callback();
+}//countdown
 
 function drawCircle(context, { x, y, radius }, color = "#DDDDDD", overlap = "source-over"){
 
@@ -255,34 +319,106 @@ function drawCircle(context, { x, y, radius }, color = "#DDDDDD", overlap = "sou
 	// style the circle
 	context.fillStyle = color;            
 	context.fill();
-
 }// drawCircle
 
-function drawPath(context, path, color = "#000000", overlap = "source-over" ){
+function drawPath(target, context, canvas, path, color = "#000000", overlap = "source-over", stroke, normalise){
 
 	// define which composite-mode to use for cutting-out
 	context.globalCompositeOperation = overlap;
 
+	let multiplier, scalar, offsetX, offsetY;
+	if(normalise){
+		const { height, width } = canvas;
+		const { radius } = target;
+		const ratio      = (height / (radius * 2));
+
+		multiplier       = ratio;
+		offsetX          = (width / 2) - (radius * 2);
+		offsetY          = (height / 2) - radius;
+	} else {
+		multiplier = 1;
+		offsetX    = 0;
+		offsetY    = 0;
+	}
+
+	// console.log({ normalise, multiplier, ratio })
+
 	// draw the path
 	context.beginPath();
 	for(let index in path){
-		const { x, y } = path[index];
+		const { x: rawX, y: rawY } = path[index];
+		const x = ((rawX - offsetX) * multiplier);
+		const y = ((rawY - offsetY) * multiplier);
 
 		if(index === 0) context.moveTo(x, y);
 		else            context.lineTo(x, y);
 	}
-	context.closePath();
+	// context.closePath();
 
 	// style the path
-	context.fillStyle = color;
-	context.fill()
+	if(stroke){
+		context.lineWidth   = window.innerHeight / 100; //3;
+		context.strokeStyle = color;
+		context.stroke();
+	}
+	else {
+		context.fillStyle = color;
+		context.fill()	
+	}
+
+	return 
 }// drawPath
 
 function drawDiff(source, target){
 
 	target("source-over");
 	source("source-atop");
-}// compare
+}// drawDiff
+
+function renderFeedback(state, diffComposite, context, canvas, bufferContext, bufferCanvas){
+	const { width, height } = canvas;
+	const { 
+		ui: { 
+			drawn: { 
+				last: lastDrawn,
+				best: bestDrawn
+			},
+			score
+		},
+		last: { 
+			path: lastPath,
+			score: lastScore
+		},
+		best: { 
+			path: bestPath,
+			score: bestScore
+		},
+	} = state;
+
+	// draw the best user-circle in the corner of the UI
+	// NOTE: currently draws at the wrong ratio because it's being compared with the new target, not its original
+	drawPath(state.best.target, bufferContext, bufferCanvas, bestPath, "#00FF00", "source-over", true, true);
+	const bestDrawnSrc = bufferCanvas.toDataURL();
+	bestDrawn.src      = bestDrawnSrc;
+	bufferContext.clearRect(0, 0, width, height);
+
+	// draw the last user-circle in the corner of the UI
+	drawPath(state.last.target, bufferContext, bufferCanvas, lastPath, "#000000", "source-over", true, true);
+	const lastDrawnSrc = bufferCanvas.toDataURL();
+	lastDrawn.src      = lastDrawnSrc;
+	bufferContext.clearRect(0, 0, width, height);
+
+
+
+	// output the score
+	score.textContent = lastScore;
+	score.setAttribute("aria-value", lastScore)
+	score.classList.add("updated");
+	setTimeout(() => { score.classList.remove("updated") }, 300);
+
+	// draw the coffeestain
+	context.putImageData(diffComposite, 0, 0, 0, 0, width, height);
+}// renderFeedback
 
 function generateImage(state, context, canvas, bufferContext, bufferCanvas){
 	return new Promise(resolve => {
@@ -311,7 +447,6 @@ function generateImage(state, context, canvas, bufferContext, bufferCanvas){
 		// draw altered data back onto the canvas
 		bufferContext.putImageData(capture, 0, 0);
 
-		console.log(pixelData)
 
 		// SAVE
 		// ----------------------------------
@@ -342,15 +477,15 @@ async function generateDiffComposite(state, context, canvas, bufferContext, buff
 	context.clearRect(0, 0, width, height);
 
 	//bind constant arguments to the functions to make it clearer later
-	const userInput   = drawPath.bind(true, context, path);
+	const userInput   = drawPath.bind(true, state, context, canvas, path);
 	const targetInput = drawCircle.bind(true, context, target);
 
 
 	// LET THE DIFFING COMMENCE
-	// ------------------------------------
+	// --------------------------------file:///C:/Users/Pookage/Projects/web/circle-tool/index.html----
 	// FIRST DIFF
 	// determines how too far IN you are (black is bad)
-	const score = drawDiff(
+	drawDiff(
 		userInput.bind(true, "#FFFFFF"),
 		targetInput.bind(true, "#000000"),
 	);
@@ -358,7 +493,7 @@ async function generateDiffComposite(state, context, canvas, bufferContext, buff
 
 	// SECOND DIFF
 	// determines how too far OUT you are (black is bad)
-	const scoreb = drawDiff(
+	drawDiff(
 		targetInput.bind(true, "#FFFFFF"),
 		userInput.bind(true, "#000000"),
 	);
@@ -394,7 +529,7 @@ function calculateScore(target, diff, allowance){
 
 	const circumfrence = (radius * 2) * Math.PI;
 	const percentage   = (circumfrence * (1 + allowance)) / diffArea;
-	const score        = (percentage * 100).toFixed(2);
+	const score        = Math.min((percentage * 100).toFixed(2), 100);
 
 	return score;
 }// calculateScore

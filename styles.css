@@ -10,3 +10,43 @@ html, body, .canvas {
 	top:  0;
 	left: 0;
 }
+
+
+.output__wrapper {
+	display: block;
+	width: 15%;
+	max-width: 300px;
+	height: 100%;
+	position: fixed;
+	top: 0;
+	right: 0;
+	z-index: 1;
+	pointer-events: none;
+	background: rgba(0,0,0,0.05);
+}
+	.output__drawn {
+		width: 100%;
+		height: auto;
+		position: absolute;
+		top: 0;
+		left: 0;
+	}
+		.output__drawn[src=""]{
+			opacity: 0
+		}
+		.output__drawn:not([src=""]){
+			opacity: 1;
+		}
+	.output__last_score {
+		position: fixed;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		opacity: 0;
+		transition: opacity 2s 1s;
+	}
+		.output__last_score.updated {
+			opacity: 1;
+			transition-duration: .3s;
+			transition-delay: 0s;
+		}

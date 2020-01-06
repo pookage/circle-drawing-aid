@@ -7,7 +7,27 @@
 		<script src="script.js"></script>
 	</head>
 	<body>
-
-		<img id="test" />
+		<output class="output__wrapper">
+			<img
+				id="output__last_drawn"
+				class="output__drawn output__last_drawn"
+				src="" 
+				alt="Last circle drawn."
+			/>
+			<img
+				id="output__best_drawn"
+				class="output__drawn output__best_drawn"
+				src="" 
+				alt="Best circle drawn."
+			/>
+			<div 
+				id="output__last_score"
+				class="output__last_score" 
+				aria-label="Previous score." 
+				aria-value="0"
+			>
+				0
+			</div>
+		</output>
 	</body>
 </html>
