@@ -31,11 +31,18 @@ function init(){
 			path: []
 		},
 		ui: {
+
 			drawn: {
 				last: document.getElementById("output__last_drawn"),
-				best: document.getElementById("output__best_drawn")
+				best: document.getElementById("output__best_drawn"),
+				optimal: document.getElementById("output__optimal_drawn"),
+				labels: document.getElementsByClassName("output__label"),
+				images: document.getElementsByClassName("output__drawn")
 			},
-			score: document.getElementById("output__last_score")
+			score: {
+				last: document.getElementById("output__last_score"),
+				best: document.getElementById("output__best_score")
+			}
 		}
 	};
 	state.restart = restart.bind(true, state, context, canvas);
@@ -47,10 +54,15 @@ function init(){
 
 	// add listeners for relative mouse events
 	// NOTE: there's a bug in chromium browsers that has buggy detection with a stylus
-	initListeners(canvas, {
+	initListeners([ canvas ], {
 		"pointerdown":  handleDrawStart,
 		"pointerup":    handleDrawEnd,
 		"pointermove":  handleDrawUpdate,
+	});
+
+	initListeners(state.ui.drawn.labels, {
+		"mouseover": focusPreview.bind(true, state.ui.drawn.images),
+		"mouseleave": blurPreview.bind(true, state.ui.drawn.images)
 	});
 
 	// create initial circle
@@ -79,9 +91,11 @@ function initCanvas(){
 	return { canvas, context };
 }// initCanvas
 
-function initListeners(element, actions){
-	for(let [ event, callback ] of Object.entries(actions)){
-		element.addEventListener(event, callback);
+function initListeners(elements, actions){
+	for(let element of elements){
+		for(let [ event, callback ] of Object.entries(actions)){
+			element.addEventListener(event, callback);
+		}
 	}
 }// initListeners
 
@@ -145,6 +159,26 @@ function startDraw(state, context, canvas, event){
 	}
 }// startDraw
 
+function focusPreview(previews, event){
+
+	const { htmlFor: targetId } = event.target;
+	// const preview     = previews.getElementById(htmlFor);
+
+	for(let preview of previews){
+		const { id } = preview;
+		if(id === targetId) preview.classList.add("output__drawn--active");
+		else                preview.classList.add("output__drawn--inactive");
+	}
+
+}// focusPreview
+
+function blurPreview(previews, event){
+	for(let preview of previews){
+		preview.classList.remove("output__drawn--active");
+		preview.classList.remove("output__drawn--inactive");
+	}
+}// blurPreview
+
 async function endDraw(state, context, canvas, bufferContext, bufferCanvas, event){
 
 	event.preventDefault();
@@ -179,7 +213,7 @@ async function endDraw(state, context, canvas, bufferContext, bufferCanvas, even
 				const last = {
 					score,
 					drawn: diff,
-					path,
+					path: [ ...path ],
 					target: state.target
 				};
 
@@ -188,7 +222,12 @@ async function endDraw(state, context, canvas, bufferContext, bufferCanvas, even
 				// if the score is better than the last; save it as the best
 				if(score > bestScore){
 					console.log(`${score} is better than ${bestScore} - UPDATING BEST!`);
-					state.best = { ...last };
+					state.best = {
+						score,
+						drawn: diff,
+						path: [ ...path ],
+						target: state.target
+					};
 				}
 
 				state.last = last;
@@ -305,7 +344,7 @@ function countdown(callback, remaining, message){
 	} else callback();
 }//countdown
 
-function drawCircle(context, { x, y, radius }, color = "#DDDDDD", overlap = "source-over"){
+function drawCircle(context, { x, y, radius }, color = "#DDDDDD", overlap = "source-over", stroke){
 
 	// define which composite-mode to use for cutting-out
 	context.globalCompositeOperation = overlap;
@@ -317,8 +356,14 @@ function drawCircle(context, { x, y, radius }, color = "#DDDDDD", overlap = "sou
 	context.closePath();
 
 	// style the circle
-	context.fillStyle = color;            
-	context.fill();
+	if(stroke){
+		context.strokeStyle = color;
+		context.stroke();
+	} else {
+		context.fillStyle = color;            
+		context.fill();
+	}
+
 }// drawCircle
 
 function drawPath(target, context, canvas, path, color = "#000000", overlap = "source-over", stroke, normalise){
@@ -326,15 +371,15 @@ function drawPath(target, context, canvas, path, color = "#000000", overlap = "s
 	// define which composite-mode to use for cutting-out
 	context.globalCompositeOperation = overlap;
 
-	let multiplier, scalar, offsetX, offsetY;
+	let multiplier, offsetX, offsetY;
 	if(normalise){
 		const { height, width } = canvas;
-		const { radius } = target;
-		const ratio      = (height / (radius * 2));
+		const { radius }        = target;
+		const ratio             = (height / (radius * 2));
 
 		multiplier       = ratio;
-		offsetX          = (width / 2) - (radius * 2);
-		offsetY          = (height / 2) - radius;
+		offsetX          = ((width / 2) - (radius * 2));
+		offsetY          = ((height / 2) - radius);
 	} else {
 		multiplier = 1;
 		offsetX    = 0;
@@ -381,9 +426,13 @@ function renderFeedback(state, diffComposite, context, canvas, bufferContext, bu
 		ui: { 
 			drawn: { 
 				last: lastDrawn,
-				best: bestDrawn
+				best: bestDrawn,
+				optimal: optimalDrawn
 			},
-			score
+			score: {
+				last: lastScoreEl,
+				best: bestScoreEl
+			}
 		},
 		last: { 
 			path: lastPath,
@@ -408,14 +457,26 @@ function renderFeedback(state, diffComposite, context, canvas, bufferContext, bu
 	lastDrawn.src      = lastDrawnSrc;
 	bufferContext.clearRect(0, 0, width, height);
 
+	// draw the optimal circle
+	drawCircle(bufferContext, { 
+		x: window.innerWidth / 1.9,
+		y: window.innerHeight / 2, 
+		radius: window.innerHeight/2 
+	}, "#ff0000", "source-over", true);
+	const optimalSrc = bufferCanvas.toDataURL();
+	optimalDrawn.src = optimalSrc;
+	bufferContext.clearRect(0, 0, width, height);
 
 
-	// output the score
-	score.textContent = lastScore;
-	score.setAttribute("aria-value", lastScore)
-	score.classList.add("updated");
-	setTimeout(() => { score.classList.remove("updated") }, 300);
+	// output the last score
+	lastScoreEl.textContent = lastScore;
+	lastScoreEl.setAttribute("aria-value", lastScore);
 
+	// output the bests core
+	bestScoreEl.textContent = lastScore;
+	bestScoreEl.setAttribute("aria-value", bestScore);
+
+	
 	// draw the coffeestain
 	context.putImageData(diffComposite, 0, 0, 0, 0, width, height);
 }// renderFeedback

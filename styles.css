@@ -13,7 +13,7 @@ html, body, .canvas {
 
 
 .output__wrapper {
-	display: block;
+	display: flex;
 	width: 15%;
 	max-width: 300px;
 	height: 100%;
@@ -21,32 +21,44 @@ html, body, .canvas {
 	top: 0;
 	right: 0;
 	z-index: 1;
-	pointer-events: none;
+	flex-direction: column;
+	justify-content: space-between;
+	/*pointer-events: none;*/
 	background: rgba(0,0,0,0.05);
 }
-	.output__drawn {
-		width: 100%;
-		height: auto;
-		position: absolute;
-		top: 0;
-		left: 0;
+	.output__previews  {
+		position: relative;
 	}
-		.output__drawn[src=""]{
-			opacity: 0
+		.output__drawn {
+			width: 100%;
+			height: auto;
+			position: absolute;
+			top: 0;
+			left: 0;
 		}
-		.output__drawn:not([src=""]){
+			.output__drawn[src=""]{
+				opacity: 0;
+			}
+			.output__drawn:not([src=""]){
+				opacity: 1;
+			}
+			.output__drawn.output__drawn--active {
+				opacity: 1;
+			}
+			.output__drawn.output__drawn--inactive {
+				opacity: 0.2;
+			}
+			.output__drawn:first-of-type {
+				position: relative;
+			}
+			.output__drawn[src=""] ~ .output__controls {
+				opacity: 0;
+			}
+		.output__label {
+			opacity: 0.5;
+		}
+		.output__label:hover {
 			opacity: 1;
+			cursor: pointer;
 		}
-	.output__last_score {
-		position: fixed;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		opacity: 0;
-		transition: opacity 2s 1s;
-	}
-		.output__last_score.updated {
-			opacity: 1;
-			transition-duration: .3s;
-			transition-delay: 0s;
-		}
+	.output__scores {}

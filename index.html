@@ -8,25 +8,61 @@
 	</head>
 	<body>
 		<output class="output__wrapper">
-			<img
-				id="output__last_drawn"
-				class="output__drawn output__last_drawn"
-				src="" 
-				alt="Last circle drawn."
-			/>
-			<img
-				id="output__best_drawn"
-				class="output__drawn output__best_drawn"
-				src="" 
-				alt="Best circle drawn."
-			/>
-			<div 
-				id="output__last_score"
-				class="output__last_score" 
-				aria-label="Previous score." 
-				aria-value="0"
-			>
-				0
+			<figure class="output__previews">
+				<img
+					id="output__last_drawn"
+					class="output__drawn output__last_drawn"
+					src="" 
+					alt="Last circle drawn."
+				/>
+				<img
+					id="output__best_drawn"
+					class="output__drawn output__best_drawn"
+					src="" 
+					alt="Best circle drawn."
+				/>
+				<img
+					id="output__optimal_drawn"
+					class="output__drawn output__optimal_drawn"
+					src="" 
+					alt="A perfect circle."
+				/>
+				<figcaption class="output__controls">
+					<label 
+						class="output__label"
+						for="output__last_drawn"
+						da>
+						Last
+					</label>
+					<label 
+						class="output__label"
+						for="output__best_drawn">
+						Best
+					</label>
+					<label 
+						class="output__optimal_drawn"
+						for="output__control__optimal_drawn">
+						Optimal
+					</label>
+				</figcaption>
+			</figure>
+			<div class="output__scores">
+				<div 
+					id="output__last_score"
+					class="output__score output__last_score" 
+					aria-label="Previous score." 
+					aria-value="0"
+				>
+					0
+				</div>
+				<div 
+					id="output__best_score"
+					class="output__score output__best_score" 
+					aria-label="Best score." 
+					aria-value="0"
+				>
+					0
+				</div>
 			</div>
 		</output>
 	</body>
